@@ -76,15 +76,20 @@
         }
         .scrub-btn:active { opacity: 0.8; transform: scale(0.98); }
 
+        /* タブ視認性の改善：グラデーションインジケーター */
+        .tabs-wrapper { position: relative; width: 100%; margin-bottom: 10px; }
         .json-tabs {
             display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px;
-            margin-bottom: 10px; scrollbar-width: none;
+            scrollbar-width: none; -ms-overflow-style: none;
+            -webkit-overflow-scrolling: touch;
         }
         .json-tabs::-webkit-scrollbar { display: none; }
+        
         .tab {
             padding: 8px 15px; background: var(--input-bg); border: 2px solid var(--accent);
             border-radius: 10px; font-size: 0.7rem; font-weight: 800; white-space: nowrap;
             cursor: pointer; -webkit-user-select: none; user-select: none; color: var(--text-gray);
+            transition: all 0.1s;
         }
         .tab.active { background: var(--main); color: #fff; border-color: var(--main); }
 
@@ -99,14 +104,27 @@
             min-height: 100px; max-height: 400px; overflow-y: auto; display: none;
         }
         .output-area.visible { display: block; }
-        .output-area pre { margin: 0; font-size: 0.8rem; font-weight: 500; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+        
+        /* フォント・行間の最適化 */
+        .output-area pre { 
+            margin: 0; 
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.85rem; 
+            font-weight: 500; 
+            line-height: 1.6; 
+            letter-spacing: -0.2px;
+            white-space: pre-wrap; 
+            word-break: break-all; 
+        }
         
         .copy-btn {
             position: absolute; top: 10px; right: 10px;
             background: rgba(255,255,255,0.15); color: #fff;
             padding: 6px 14px; border-radius: 8px; font-size: 0.7rem; font-weight: 800;
             cursor: pointer; -webkit-user-select: none; user-select: none; z-index: 10;
+            transition: background 0.2s;
         }
+        .copy-btn.done { background: var(--success); }
 
         #toast {
             position: absolute; top: 10px; right: 85px;
@@ -157,7 +175,10 @@
 
     <div id="error-msg">No valid JSON found in text.</div>
     
-    <div class="json-tabs" id="jsonTabs"></div>
+    <div class="tabs-wrapper">
+        <div class="json-tabs" id="jsonTabs"></div>
+    </div>
+    
     <div class="output-label" id="outputLabel"></div>
 
     <div class="output-area" id="outputArea">
@@ -196,13 +217,15 @@
     const cleanOutput = document.getElementById('cleanOutput');
     const errorMsg = document.getElementById('error-msg');
     const toast = document.getElementById('toast');
+    const copyBtn = document.getElementById('copyBtn');
 
     let extractedJSONs = [];
     let currentIdx = 0;
 
     function handleInput() {
         clrBtn.classList.toggle('visible', dirtyInput.value.length > 0);
-        processScrub(false);
+        // 入力中は自動スクロールさせない
+        processScrub(false, false);
     }
 
     function clearInput() {
@@ -221,10 +244,11 @@
     }
 
     function manualScrub() {
-        processScrub(true);
+        // ボタン押下時のみ自動スクロールを許可
+        processScrub(true, true);
     }
 
-    function processScrub(showUI) {
+    function processScrub(showUI, shouldScroll) {
         const text = dirtyInput.value;
         if (text.trim() === "") {
             resetOutput();
@@ -237,7 +261,7 @@
             renderTabs();
             selectJSON(0);
             errorMsg.style.display = 'none';
-            if(showUI) outputArea.scrollIntoView({ behavior: 'smooth' });
+            if(shouldScroll) outputArea.scrollIntoView({ behavior: 'smooth' });
         } else {
             resetOutput();
             if (showUI) errorMsg.style.display = 'block';
@@ -291,7 +315,7 @@
         const jsonStr = JSON.stringify(json, null, 2);
         cleanOutput.innerText = jsonStr;
         outputArea.classList.add('visible');
-        outputLabel.innerText = `Found ${extractedJSONs.length} JSON block(s). Block #${idx+1} selected.`;
+        outputLabel.innerText = `Found ${extractedJSONs.length} JSON block(s). #${idx+1} selected.`;
         outputLabel.style.display = 'block';
         
         document.querySelectorAll('.tab').forEach((t, i) => {
@@ -302,8 +326,17 @@
     async function copyResult() {
         try {
             await navigator.clipboard.writeText(cleanOutput.innerText);
+            
+            // フィードバックの強化
             toast.style.opacity = '1';
-            setTimeout(() => toast.style.opacity = '0', 1500);
+            copyBtn.classList.add('done');
+            copyBtn.innerText = 'DONE';
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                copyBtn.classList.remove('done');
+                copyBtn.innerText = 'COPY';
+            }, 1500);
         } catch (err) {}
     }
 
