@@ -48,6 +48,7 @@
             width: 100%;
             height: 180px;
             padding: 15px;
+            padding-right: 35px; /* clrボタン用スペース */
             border: 2px solid var(--accent);
             border-radius: var(--radius);
             background: var(--input-bg);
@@ -62,7 +63,28 @@
             -webkit-text-fill-color: var(--main) !important;
             opacity: 1 !important;
         }
-        textarea::placeholder { color: #bbb; }
+        /* 憲法指定のプレースホルダー色 #bbb */
+        textarea::placeholder { color: #bbb; -webkit-text-fill-color: #bbb; }
+
+        .clr-btn {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+        }
+        .clr-btn.visible { display: flex; }
 
         .scrub-btn {
             width: 100%;
@@ -79,6 +101,15 @@
         }
         .scrub-btn:active { opacity: 0.8; }
 
+        .output-label {
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: #28a745; /* 成功時の緑 */
+            text-align: left;
+            margin-bottom: 8px;
+            display: none;
+        }
+
         .output-area {
             position: relative;
             background: #222;
@@ -92,7 +123,7 @@
             display: none;
         }
         .output-area.visible { display: block; }
-        .output-area pre { margin: 0; font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+        .output-area pre { margin: 0; font-size: 0.8rem; font-weight: 500; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
         
         .copy-overlay {
             position: absolute;
@@ -107,7 +138,7 @@
             cursor: pointer;
         }
 
-        #error-msg { color: var(--error); font-size: 0.8rem; font-weight: 700; margin-top: 10px; display: none; }
+        #error-msg { color: var(--error); font-size: 0.8rem; font-weight: 700; margin-top: 10px; margin-bottom: 10px; display: none; }
 
         #toast {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
@@ -150,13 +181,15 @@
     <p class="subtitle">Extracts and cleanses JSON from logs, emails, or messy text.</p>
 
     <div class="input-group">
-        <span class="input-label">Paste Messy Text Below</span>
-        <textarea id="dirtyInput" placeholder='Error 500: { "id": 123, "status": "ok" } logged at 10:00AM...' oninput="autoScrub()"></textarea>
+        <span class="input-label">Paste Raw Log / Messy Text</span>
+        <textarea id="dirtyInput" placeholder='2026-04-06 INFO: {"id": 123, "status": "ok"} logged by node...' oninput="handleInput()"></textarea>
+        <button class="clr-btn" id="clrBtn" onclick="clearInput()">×</button>
     </div>
 
     <button class="scrub-btn" onclick="manualScrub()">SCRUB NOW</button>
 
     <div id="error-msg">No valid JSON found in text.</div>
+    <div class="output-label" id="outputLabel"></div>
 
     <div class="output-area" id="outputArea">
         <div class="copy-overlay" onclick="copyResult()">COPY</div>
@@ -186,33 +219,58 @@
 
 <script>
     const dirtyInput = document.getElementById('dirtyInput');
+    const clrBtn = document.getElementById('clrBtn');
     const outputArea = document.getElementById('outputArea');
+    const outputLabel = document.getElementById('outputLabel');
     const cleanOutput = document.getElementById('cleanOutput');
     const errorMsg = document.getElementById('error-msg');
     const toast = document.getElementById('toast');
 
-    function autoScrub() {
-        if (dirtyInput.value.length > 10) { // ある程度の長さで自動開始
-            manualScrub();
-        }
+    function handleInput() {
+        clrBtn.classList.toggle('visible', dirtyInput.value.length > 0);
+        // 自動実行はするが、エラーは出さない
+        processScrub(false);
+    }
+
+    function clearInput() {
+        dirtyInput.value = '';
+        clrBtn.classList.remove('visible');
+        outputArea.classList.remove('visible');
+        outputLabel.style.display = 'none';
+        errorMsg.style.display = 'none';
+        dirtyInput.focus();
     }
 
     function manualScrub() {
+        // ボタンを押した時はエラーを表示する
+        processScrub(true);
+    }
+
+    function processScrub(showError) {
         const text = dirtyInput.value;
+        if (text.trim() === "") {
+            outputArea.classList.remove('visible');
+            outputLabel.style.display = 'none';
+            return;
+        }
+
         const result = extractJSON(text);
 
         if (result) {
-            cleanOutput.innerText = JSON.stringify(result, null, 2);
+            const jsonStr = JSON.stringify(result, null, 2);
+            cleanOutput.innerText = jsonStr;
             outputArea.classList.add('visible');
+            outputLabel.innerText = `JSON Extracted! (${jsonStr.length} bytes)`;
+            outputLabel.style.display = 'block';
             errorMsg.style.display = 'none';
         } else {
             outputArea.classList.remove('visible');
-            if (text.trim() !== "") errorMsg.style.display = 'block';
+            outputLabel.style.display = 'none';
+            if (showError) errorMsg.style.display = 'block';
         }
     }
 
     function extractJSON(str) {
-        // {} または [] のペアを最長一致で探すロジック
         const startChars = ['{', '['];
         const endChars = ['}', ']'];
         
@@ -224,7 +282,6 @@
                         try {
                             return JSON.parse(candidate);
                         } catch (e) {
-                            // 失敗したら内側のペアを探し続ける
                             continue;
                         }
                     }
